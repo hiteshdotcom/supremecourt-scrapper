@@ -19,9 +19,9 @@ This repository stores code that was featured in my <a href="https://youtu.be/RG
 ```
 
 ## Files
-- **quickstart.py** includes a basic Playwright syntax of navigating to a web page and fetching its source code, title and screenshot.
-- **PDF_scraper.py** web scrapes keyword-based research papers from Arxiv.org and automatically downloads them to a local machine.
-- **CAPTCHA_solver.py** includes a basic implementation of a CAPTCHA solving mechanism named Web Unlocker, by Bright Data.
+- **pw_quickstart.py** includes a basic Playwright syntax of navigating to a web page and fetching its source code, title and screenshot.
+- **pw_CAPTCHA.py** includes a basic implementation of a CAPTCHA solving mechanism named Web Unlocker, by Bright Data.
+- **PDF_scraper.py [coming soon...]** web scrapes keyword-based research papers from Arxiv.org and automatically downloads them to a local machine.
 
 
 
