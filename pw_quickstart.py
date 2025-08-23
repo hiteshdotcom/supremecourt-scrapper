@@ -12,7 +12,7 @@ browser = pw.firefox.launch(
 # create new browser tab
 page = browser.new_page()
 # navigate to web page
-page.goto("https://google.com")
+page.goto("https://www.sci.gov.in/judgements-judgement-date/")
 
 # web page details and source code
 print(page.content())
