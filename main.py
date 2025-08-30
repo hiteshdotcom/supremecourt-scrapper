@@ -219,7 +219,12 @@ class ScraperCLI:
             
             captcha_solver = CaptchaSolver(
                 config.captcha.use_manual_input,
-                config.captcha.ocr_confidence_threshold
+                config.captcha.ocr_confidence_threshold,
+                config.captcha.use_openai,
+                config.captcha.openai_api_key,
+                config.captcha.openai_model,
+                config.captcha.openai_max_tokens,
+                config.captcha.openai_temperature
             )
             
             with sync_playwright() as p:

@@ -8,16 +8,46 @@ from typing import Optional, Tuple
 from playwright.sync_api import Page
 import time
 from loguru import logger
+import openai
+from openai import OpenAI
 
 class CaptchaSolver:
-    """Handles CAPTCHA solving using OCR or manual input"""
+    """Handles CAPTCHA solving using OCR, manual input, or OpenAI"""
     
-    def __init__(self, use_manual_input: bool = True, confidence_threshold: float = 0.7):
+    def __init__(self, use_manual_input: bool = True, confidence_threshold: float = 0.7, 
+                 use_openai: bool = False, openai_api_key: str = "", 
+                 openai_model: str = "gpt-4o-mini", openai_max_tokens: int = 100, 
+                 openai_temperature: float = 0.1):
         self.use_manual_input = use_manual_input
+        self.use_openai = use_openai
         self.confidence_threshold = confidence_threshold
+        
+        # Debug logging for initialization
+        logger.info(f"CaptchaSolver initialized with: use_manual_input={use_manual_input}, use_openai={use_openai}, api_key_provided={bool(openai_api_key)}")
         
         # OCR configuration
         self.ocr_config = '--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+        
+        # OpenAI configuration
+        self.openai_api_key = openai_api_key
+        self.openai_model = openai_model
+        self.openai_max_tokens = openai_max_tokens
+        self.openai_temperature = openai_temperature
+        self.openai_client = None
+        
+        # Initialize OpenAI client if enabled
+        if self.use_openai and self.openai_api_key:
+            try:
+                self.openai_client = OpenAI(api_key=self.openai_api_key)
+                logger.info("OpenAI client initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {e}")
+                self.use_openai = False
+        elif self.use_openai and not self.openai_api_key:
+            logger.warning("OpenAI enabled but no API key provided")
+            self.use_openai = False
+        elif not self.use_openai:
+            logger.info("OpenAI CAPTCHA solving is disabled")
         
     def preprocess_image(self, image_bytes: bytes) -> np.ndarray:
         """Preprocess CAPTCHA image for better OCR accuracy"""
@@ -81,6 +111,74 @@ class CaptchaSolver:
         except Exception as e:
             logger.error(f"OCR extraction failed: {e}")
             return "", 0.0
+    
+    def solve_captcha_with_openai(self, image_bytes: bytes) -> Optional[str]:
+        """Solve CAPTCHA using OpenAI Vision API"""
+        try:
+            if not self.openai_client:
+                logger.error("OpenAI client not initialized")
+                return None
+            
+            # Convert image bytes to base64
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            
+            # Create the prompt for CAPTCHA solving with math OCR capabilities
+            prompt = (
+                "You are an advanced math image OCR and CAPTCHA solver. Look at this image carefully and:"
+                "1. If it contains mathematical expressions, solve them and return the numerical result."
+                "2. If it contains text/characters, extract them exactly as shown."
+                "3. If it contains both math and text, prioritize solving the math."
+                "Return ONLY the final answer/text you see, nothing else. "
+                "Be very precise and only return the exact result you can clearly determine."
+            )
+            
+            # Make API call to OpenAI
+            response = self.openai_client.chat.completions.create(
+                model=self.openai_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=self.openai_max_tokens,
+                temperature=self.openai_temperature
+            )
+            
+            # Extract the response text
+            captcha_text = response.choices[0].message.content.strip()
+            
+            # Clean up the response (remove any extra text)
+            captcha_text = ''.join(c for c in captcha_text if c.isalnum())
+            
+            # For math CAPTCHAs, single digits are valid; for text CAPTCHAs, usually 3+ chars
+            if len(captcha_text) < 1:  # At least one character/digit required
+                logger.warning(f"OpenAI extracted text too short: '{captcha_text}'")
+                return None
+            
+            # Log whether this looks like a math result or text
+            if captcha_text.isdigit():
+                logger.info(f"OpenAI detected math result: '{captcha_text}'")
+            else:
+                logger.info(f"OpenAI detected text: '{captcha_text}'")
+            
+            logger.info(f"OpenAI CAPTCHA solution: '{captcha_text}'")
+            return captcha_text
+            
+        except Exception as e:
+            logger.error(f"OpenAI CAPTCHA solving failed: {e}")
+            return None
     
     def get_captcha_image(self, page: Page) -> Optional[bytes]:
         """Extract CAPTCHA image from the page"""
@@ -174,10 +272,37 @@ class CaptchaSolver:
         for attempt in range(max_attempts):
             logger.info(f"CAPTCHA solving attempt {attempt + 1}/{max_attempts}")
             
+            # Debug logging for current configuration
+            logger.info(f"Current config: use_openai={self.use_openai}, openai_client_available={self.openai_client is not None}, use_manual_input={self.use_manual_input}")
+            
             try:
-                if self.use_manual_input:
+                captcha_text = None
+                
+                # Try OpenAI first if enabled
+                if self.use_openai and self.openai_client:
+                    logger.info("Attempting to solve CAPTCHA with OpenAI...")
+                    image_bytes = self.get_captcha_image(page)
+                    if image_bytes:
+                        captcha_text = self.solve_captcha_with_openai(image_bytes)
+                        if captcha_text:
+                            logger.info(f"OpenAI successfully solved CAPTCHA: '{captcha_text}'")
+                        else:
+                            logger.warning("OpenAI failed to solve CAPTCHA")
+                    else:
+                        logger.error("Failed to get CAPTCHA image for OpenAI")
+                elif self.use_openai and not self.openai_client:
+                    logger.warning("OpenAI enabled but client not available")
+                elif not self.use_openai:
+                    logger.info("OpenAI CAPTCHA solving is disabled, skipping...")
+                
+                # Fallback to manual input if OpenAI fails or is disabled
+                if not captcha_text and self.use_manual_input:
+                    logger.info("Falling back to manual CAPTCHA input...")
                     captcha_text = self.solve_captcha_manual(page)
-                else:
+                
+                # Fallback to OCR if both OpenAI and manual are disabled/failed
+                if not captcha_text and not self.use_manual_input:
+                    logger.info("Falling back to OCR CAPTCHA solving...")
                     captcha_text = self.solve_captcha_ocr(page)
                 
                 if captcha_text:

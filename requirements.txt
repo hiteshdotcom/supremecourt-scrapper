@@ -34,3 +34,6 @@ tenacity==8.2.3
 
 # HTTP client with better session management
 httpx==0.25.2
+
+# OpenAI API for CAPTCHA solving
+openai==1.54.3

@@ -11,8 +11,8 @@ class ScrapingConfig:
     """Configuration for web scraping parameters"""
     base_url: str = "https://www.sci.gov.in/judgements-judgement-date/"
     max_date_range_days: int = 30  # Supreme Court allows max 30 days
-    start_year: int = 2004  # Adjust based on your needs
-    end_year: int = 2024
+    start_year: int = int(os.getenv("SCRAPING_START_YEAR", "2004"))  # Read from environment
+    end_year: int = int(os.getenv("SCRAPING_END_YEAR", "2024"))  # Read from environment
     headless: bool = True
     slow_mo: int = 1000  # Milliseconds delay between actions
     timeout: int = 30000  # Page timeout in milliseconds
@@ -46,9 +46,15 @@ class S3Config:
 @dataclass
 class CaptchaConfig:
     """CAPTCHA solving configuration"""
-    use_manual_input: bool = True  # Set to False for OCR
-    ocr_confidence_threshold: float = 0.7
-    max_captcha_attempts: int = 3
+    use_manual_input: bool = os.getenv("CAPTCHA_USE_MANUAL_INPUT", "true").lower() == "true"
+    use_openai: bool = os.getenv("CAPTCHA_USE_OPENAI", "false").lower() == "true"
+    ocr_confidence_threshold: float = float(os.getenv("CAPTCHA_OCR_CONFIDENCE_THRESHOLD", "0.7"))
+    max_captcha_attempts: int = int(os.getenv("CAPTCHA_MAX_ATTEMPTS", "3"))
+    # OpenAI configuration
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    openai_max_tokens: int = int(os.getenv("OPENAI_MAX_TOKENS", "100"))
+    openai_temperature: float = float(os.getenv("OPENAI_TEMPERATURE", "0.1"))
     
 @dataclass
 class LoggingConfig:
@@ -88,6 +94,10 @@ class AppConfig:
         # Check date range
         if self.scraping.start_year >= self.scraping.end_year:
             errors.append("Start year must be less than end year")
+            
+        # Check OpenAI configuration if enabled
+        if self.captcha.use_openai and not self.captcha.openai_api_key:
+            errors.append("OpenAI API key is required when use_openai is enabled")
             
         if errors:
             print("Configuration errors:")
