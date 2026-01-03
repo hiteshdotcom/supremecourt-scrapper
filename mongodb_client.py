@@ -33,16 +33,29 @@ class JudgmentMetadata:
     title: Optional[str] = None         # Maps to petitioner_respondent
     judge: Optional[str] = None         # Maps to judgment_by
     
-    # File and URL information
+    # File and URL information (source URLs from website)
     file_url: Optional[str] = None      # Primary PDF download link (legacy)
     pdf_link: Optional[str] = None      # Primary PDF link (legacy)
-    pdf_links: Optional[List[str]] = None  # All PDF links found
+    pdf_links: Optional[List[str]] = None  # All PDF links found from website
     judgment_links: Optional[List[str]] = None  # All judgment links as array of strings
-    file_name: Optional[str] = None
-    file_size: Optional[int] = None
-    file_type: Optional[str] = None
     
-    # S3 information
+    # Multiple files information (for cases with multiple documents)
+    files: Optional[List[Dict[str, Any]]] = None  # List of file information dicts
+    # Each dict contains: {
+    #   "source_url": str,           # Original download URL
+    #   "file_name": str,            # Local filename
+    #   "file_size": int,            # File size in bytes
+    #   "file_type": str,            # File type (pdf, doc, etc)
+    #   "s3_bucket": str,            # S3 bucket name
+    #   "s3_key": str,               # S3 object key
+    #   "s3_url": str,               # Full S3 URL
+    #   "s3_metadata": dict,         # S3 metadata and tags
+    #   "uploaded_date": str,        # Upload timestamp
+    #   "file_hash": str,            # MD5 hash of file
+    #   "document_type": str         # Type of document (judgment, order, etc)
+    # }
+    
+    # Legacy S3 information (for backward compatibility - primary file only)
     s3_bucket: Optional[str] = None
     s3_key: Optional[str] = None
     s3_url: Optional[str] = None
@@ -306,6 +319,28 @@ class MongoDBClient:
             "uploaded_date": datetime.utcnow().isoformat()
         }
         return self.update_judgment(judgment_id, updates)
+    
+    def add_file_to_judgment(self, judgment_id: str, file_info: Dict[str, Any]) -> bool:
+        """Add a file to judgment's files array"""
+        try:
+            result = self.collection.update_one(
+                {"judgment_id": judgment_id},
+                {
+                    "$push": {"files": file_info},
+                    "$set": {"last_updated": datetime.utcnow().isoformat()}
+                }
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"Added file to judgment {judgment_id}: {file_info.get('file_name')}")
+                return True
+            else:
+                logger.warning(f"Failed to add file to judgment: {judgment_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to add file to judgment {judgment_id}: {e}")
+            return False
     
     def mark_as_completed(self, judgment_id: str) -> bool:
         """Mark judgment as completed"""

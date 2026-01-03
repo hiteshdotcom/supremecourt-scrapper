@@ -112,25 +112,47 @@ class CaptchaSolver:
             logger.error(f"OCR extraction failed: {e}")
             return "", 0.0
     
-    def solve_captcha_with_openai(self, image_bytes: bytes) -> Optional[str]:
-        """Solve CAPTCHA using OpenAI Vision API"""
+    def solve_captcha_with_openai(self, image_bytes: bytes, retry_count: int = 0) -> Optional[str]:
+        """Solve CAPTCHA using OpenAI Vision API with enhanced logging"""
         try:
+            logger.info(f"[OpenAI CAPTCHA] Starting attempt (retry: {retry_count})")
+            
             if not self.openai_client:
-                logger.error("OpenAI client not initialized")
+                logger.error("[OpenAI CAPTCHA] Client not initialized - check API key")
                 return None
+            
+            if not image_bytes or len(image_bytes) == 0:
+                logger.error("[OpenAI CAPTCHA] Image bytes are empty")
+                return None
+            
+            logger.info(f"[OpenAI CAPTCHA] Image size: {len(image_bytes)} bytes")
+            
+            # Save CAPTCHA image for debugging
+            try:
+                with open(f"captcha_openai_attempt_{retry_count}.png", "wb") as f:
+                    f.write(image_bytes)
+                logger.info(f"[OpenAI CAPTCHA] Saved image to captcha_openai_attempt_{retry_count}.png")
+            except Exception as e:
+                logger.warning(f"[OpenAI CAPTCHA] Could not save debug image: {e}")
             
             # Convert image bytes to base64
             image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            logger.info(f"[OpenAI CAPTCHA] Base64 encoded, length: {len(image_base64)}")
             
             # Create the prompt for CAPTCHA solving with math OCR capabilities
             prompt = (
-                "You are an advanced math image OCR and CAPTCHA solver. Look at this image carefully and:"
-                "1. If it contains mathematical expressions, solve them and return the numerical result."
-                "2. If it contains text/characters, extract them exactly as shown."
-                "3. If it contains both math and text, prioritize solving the math."
-                "Return ONLY the final answer/text you see, nothing else. "
-                "Be very precise and only return the exact result you can clearly determine."
+                "You are an advanced image OCR and CAPTCHA solver. Analyze this CAPTCHA image:\n\n"
+                "1. If it contains a MATH EXPRESSION (e.g., '2+3', '5-1', '4*2'), solve it and return ONLY the numeric answer.\n"
+                "2. If it contains TEXT/LETTERS (e.g., 'ABC123'), extract them exactly as shown.\n"
+                "3. Be precise - look carefully at each character.\n\n"
+                "IMPORTANT: Return ONLY the answer - no explanations, no extra words, just the result.\n"
+                "Examples:\n"
+                "- If you see '2+3', return: 5\n"
+                "- If you see 'ABC123', return: ABC123\n"
+                "- If you see '10-5', return: 5"
             )
+            
+            logger.info("[OpenAI CAPTCHA] Sending request to OpenAI API...")
             
             # Make API call to OpenAI
             response = self.openai_client.chat.completions.create(
@@ -156,28 +178,34 @@ class CaptchaSolver:
                 temperature=self.openai_temperature
             )
             
+            logger.info("[OpenAI CAPTCHA] Received response from OpenAI")
+            
             # Extract the response text
-            captcha_text = response.choices[0].message.content.strip()
+            raw_response = response.choices[0].message.content.strip()
+            logger.info(f"[OpenAI CAPTCHA] Raw response: '{raw_response}'")
             
             # Clean up the response (remove any extra text)
-            captcha_text = ''.join(c for c in captcha_text if c.isalnum())
+            captcha_text = ''.join(c for c in raw_response if c.isalnum())
+            logger.info(f"[OpenAI CAPTCHA] Cleaned response: '{captcha_text}'")
             
-            # For math CAPTCHAs, single digits are valid; for text CAPTCHAs, usually 3+ chars
-            if len(captcha_text) < 1:  # At least one character/digit required
-                logger.warning(f"OpenAI extracted text too short: '{captcha_text}'")
+            # Validate response
+            if len(captcha_text) < 1:
+                logger.warning(f"[OpenAI CAPTCHA] Extracted text too short: '{captcha_text}'")
                 return None
             
             # Log whether this looks like a math result or text
             if captcha_text.isdigit():
-                logger.info(f"OpenAI detected math result: '{captcha_text}'")
+                logger.info(f"[OpenAI CAPTCHA] ✓ Detected numeric answer (likely math): '{captcha_text}'")
             else:
-                logger.info(f"OpenAI detected text: '{captcha_text}'")
+                logger.info(f"[OpenAI CAPTCHA] ✓ Detected alphanumeric text: '{captcha_text}'")
             
-            logger.info(f"OpenAI CAPTCHA solution: '{captcha_text}'")
+            logger.info(f"[OpenAI CAPTCHA] ✓ SUCCESS - Solution: '{captcha_text}'")
             return captcha_text
             
         except Exception as e:
-            logger.error(f"OpenAI CAPTCHA solving failed: {e}")
+            logger.error(f"[OpenAI CAPTCHA] ✗ FAILED - Error: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"[OpenAI CAPTCHA] Traceback: {traceback.format_exc()}")
             return None
     
     def get_captcha_image(self, page: Page) -> Optional[bytes]:
@@ -268,7 +296,7 @@ class CaptchaSolver:
             return None
     
     def solve_captcha(self, page: Page, max_attempts: int = 3) -> Optional[str]:
-        """Main method to solve CAPTCHA"""
+        """Main method to solve CAPTCHA with OpenAI retry logic"""
         for attempt in range(max_attempts):
             logger.info(f"CAPTCHA solving attempt {attempt + 1}/{max_attempts}")
             
@@ -278,16 +306,27 @@ class CaptchaSolver:
             try:
                 captcha_text = None
                 
-                # Try OpenAI first if enabled
+                # Try OpenAI first if enabled (with internal retries)
                 if self.use_openai and self.openai_client:
                     logger.info("Attempting to solve CAPTCHA with OpenAI...")
+                    
+                    # Get CAPTCHA image once
                     image_bytes = self.get_captcha_image(page)
                     if image_bytes:
-                        captcha_text = self.solve_captcha_with_openai(image_bytes)
-                        if captcha_text:
-                            logger.info(f"OpenAI successfully solved CAPTCHA: '{captcha_text}'")
-                        else:
-                            logger.warning("OpenAI failed to solve CAPTCHA")
+                        # Try OpenAI multiple times with same image before giving up
+                        openai_retries = 2
+                        for openai_attempt in range(openai_retries):
+                            captcha_text = self.solve_captcha_with_openai(image_bytes, retry_count=openai_attempt)
+                            if captcha_text:
+                                logger.info(f"[OpenAI CAPTCHA] ✓ Success on attempt {openai_attempt + 1}/{openai_retries}")
+                                return captcha_text
+                            else:
+                                logger.warning(f"[OpenAI CAPTCHA] ✗ Failed attempt {openai_attempt + 1}/{openai_retries}")
+                                if openai_attempt < openai_retries - 1:
+                                    logger.info("[OpenAI CAPTCHA] Retrying with same image...")
+                                    time.sleep(1)
+                        
+                        logger.warning("[OpenAI CAPTCHA] All OpenAI attempts failed for this CAPTCHA")
                     else:
                         logger.error("Failed to get CAPTCHA image for OpenAI")
                 elif self.use_openai and not self.openai_client:
@@ -316,6 +355,8 @@ class CaptchaSolver:
                     
             except Exception as e:
                 logger.error(f"CAPTCHA solving attempt {attempt + 1} failed: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
         
         logger.error(f"Failed to solve CAPTCHA after {max_attempts} attempts")
         return None

@@ -91,38 +91,57 @@ class S3Client:
                 logger.error(f"Error checking bucket {self.config.bucket_name}: {e}")
                 return False
     
-    def _generate_s3_key(self, file_name: str, judgment_date: str = None, case_number: str = None) -> str:
-        """Generate S3 key for the file"""
-        # Clean file name
-        clean_filename = "".join(c for c in file_name if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+    def _generate_s3_key(self, file_name: str, judgment_date: str = None, case_number: str = None, court_type: str = "supreme_court") -> str:
+        """Generate S3 key for the file with improved organization
         
-        # Create folder structure based on date
+        Structure: {prefix}{court_type}/{year}/{case_number}/judgment_{date}.pdf
+        Example: high_court_judgments/supreme_court/2024/SLP_12345_2024/judgment_15-01-2024.pdf
+        """
+        # Clean file name and extract extension
+        clean_filename = "".join(c for c in file_name if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+        file_extension = clean_filename.split('.')[-1] if '.' in clean_filename else 'pdf'
+        
+        # Parse judgment date to get year
+        year = "unknown_year"
+        date_str = "unknown_date"
         if judgment_date:
             try:
-                # Parse date and create year/month structure
+                # Handle DD-MM-YYYY format
                 date_parts = judgment_date.split('-')
                 if len(date_parts) == 3:
-                    day, month, year = date_parts
-                    folder_path = f"{year}/{month.zfill(2)}/"
+                    day, month, year_part = date_parts
+                    year = year_part
+                    date_str = judgment_date
                 else:
-                    folder_path = "unknown_date/"
+                    # Try other formats
+                    from datetime import datetime
+                    try:
+                        parsed_date = datetime.strptime(judgment_date, '%Y-%m-%d')
+                        year = str(parsed_date.year)
+                        date_str = parsed_date.strftime('%d-%m-%Y')
+                    except:
+                        date_str = judgment_date.replace('/', '-').replace(' ', '_')
             except:
-                folder_path = "unknown_date/"
-        else:
-            folder_path = "unknown_date/"
+                logger.warning(f"Could not parse judgment date: {judgment_date}")
         
-        # Add case number to filename if available
+        # Clean case number for folder name
+        case_folder = "unknown_case"
         if case_number:
-            clean_case = "".join(c for c in case_number if c.isalnum() or c in ('-', '_'))
-            name_parts = clean_filename.rsplit('.', 1)
-            if len(name_parts) == 2:
-                clean_filename = f"{name_parts[0]}_{clean_case}.{name_parts[1]}"
-            else:
-                clean_filename = f"{clean_filename}_{clean_case}"
+            # Remove special characters but keep alphanumeric, hyphens, and underscores
+            clean_case = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in case_number)
+            clean_case = clean_case.replace('/', '_').replace(' ', '_')
+            case_folder = clean_case
+        
+        # Generate filename with date
+        filename = f"judgment_{date_str}.{file_extension}"
+        
+        # Create hierarchical folder structure
+        folder_path = f"{court_type}/{year}/{case_folder}/"
         
         # Combine prefix, folder path, and filename
-        s3_key = f"{self.config.folder_prefix}{folder_path}{clean_filename}"
+        s3_key = f"{self.config.folder_prefix}{folder_path}{filename}"
         
+        logger.info(f"Generated S3 key: {s3_key}")
         return s3_key
     
     def _get_file_metadata(self, file_path: str) -> Dict[str, Any]:
@@ -159,8 +178,9 @@ class S3Client:
                    file_path: str, 
                    judgment_date: str = None, 
                    case_number: str = None,
-                   metadata: Dict[str, str] = None) -> Optional[Dict[str, Any]]:
-        """Upload a file to S3"""
+                   metadata: Dict[str, str] = None,
+                   court_type: str = "supreme_court") -> Optional[Dict[str, Any]]:
+        """Upload a file to S3 with comprehensive metadata and tags"""
         try:
             file_path = Path(file_path)
             
@@ -172,27 +192,28 @@ class S3Client:
             if not self._ensure_bucket_exists():
                 return None
             
-            # Generate S3 key
-            s3_key = self._generate_s3_key(file_path.name, judgment_date, case_number)
+            # Generate S3 key with court_type
+            s3_key = self._generate_s3_key(file_path.name, judgment_date, case_number, court_type)
             
             # Get file metadata
             file_metadata = self._get_file_metadata(file_path)
             
-            # Prepare upload metadata
+            # Prepare upload metadata (header metadata - limited to 2KB)
             upload_metadata = {
-                'uploaded_by': 'supreme_court_scraper',
-                'upload_date': datetime.utcnow().isoformat(),
-                'original_filename': file_path.name,
-                'file_hash': file_metadata['file_hash'],
-                'file_size': str(file_metadata['size'])
+                'uploaded-by': 'supreme-court-scraper',
+                'upload-date': datetime.utcnow().isoformat(),
+                'original-filename': file_path.name[:200],  # Limit length
+                'file-hash': file_metadata['file_hash'],
+                'file-size': str(file_metadata['size'])
             }
             
             if judgment_date:
-                upload_metadata['judgment_date'] = judgment_date
+                upload_metadata['judgment-date'] = judgment_date[:50]
             if case_number:
-                upload_metadata['case_number'] = case_number
-            if metadata:
-                upload_metadata.update(metadata)
+                upload_metadata['case-number'] = case_number[:200]
+            
+            # Prepare object tags (more comprehensive, for searching)
+            tags = self._prepare_tags(judgment_date, case_number, court_type, metadata)
             
             # Check if file already exists
             if self._file_exists(s3_key):
@@ -205,15 +226,84 @@ class S3Client:
             # For large files, use multipart upload
             file_size = file_metadata['size']
             if file_size > 100 * 1024 * 1024:  # 100MB
-                return self._upload_large_file(file_path, s3_key, upload_metadata, file_metadata)
+                result = self._upload_large_file(file_path, s3_key, upload_metadata, file_metadata, tags)
             else:
-                return self._upload_small_file(file_path, s3_key, upload_metadata, file_metadata)
+                result = self._upload_small_file(file_path, s3_key, upload_metadata, file_metadata, tags)
+            
+            # Add tags after upload
+            if result and tags:
+                self._add_object_tags(s3_key, tags)
+            
+            return result
             
         except Exception as e:
             logger.error(f"Failed to upload file {file_path}: {e}")
             return None
     
-    def _upload_small_file(self, file_path: Path, s3_key: str, metadata: Dict[str, str], file_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _prepare_tags(self, judgment_date: str = None, case_number: str = None, 
+                     court_type: str = None, metadata: Dict[str, str] = None) -> Dict[str, str]:
+        """Prepare S3 object tags for searchability (limit 10 tags, each key/value max 256 chars)"""
+        tags = {}
+        
+        # Add court type
+        if court_type:
+            tags['court_type'] = court_type[:256]
+        
+        # Add judgment date and year
+        if judgment_date:
+            tags['judgment_date'] = judgment_date[:256]
+            try:
+                # Extract year for easier filtering
+                date_parts = judgment_date.split('-')
+                if len(date_parts) == 3:
+                    year = date_parts[2] if len(date_parts[2]) == 4 else date_parts[0]
+                    tags['year'] = year
+            except:
+                pass
+        
+        # Add case number
+        if case_number:
+            tags['case_number'] = case_number[:256]
+        
+        # Add additional metadata (limited to 10 tags total)
+        if metadata:
+            priority_fields = ['petitioner_respondent', 'judge', 'bench', 'diary_number']
+            tag_count = len(tags)
+            
+            for field in priority_fields:
+                if tag_count >= 10:
+                    break
+                if field in metadata and metadata[field]:
+                    # Clean tag value (only alphanumeric, spaces, and allowed chars)
+                    tag_value = str(metadata[field])[:256]
+                    tags[field] = tag_value
+                    tag_count += 1
+        
+        return tags
+    
+    def _add_object_tags(self, s3_key: str, tags: Dict[str, str]) -> bool:
+        """Add tags to an S3 object"""
+        try:
+            if not tags:
+                return True
+            
+            # Format tags for S3 API
+            tag_set = [{'Key': k, 'Value': v} for k, v in tags.items()]
+            
+            self.s3_client.put_object_tagging(
+                Bucket=self.config.bucket_name,
+                Key=s3_key,
+                Tagging={'TagSet': tag_set}
+            )
+            
+            logger.info(f"Added {len(tags)} tags to {s3_key}")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Failed to add tags to {s3_key}: {e}")
+            return False
+    
+    def _upload_small_file(self, file_path: Path, s3_key: str, metadata: Dict[str, str], file_metadata: Dict[str, Any], tags: Dict[str, str] = None) -> Dict[str, Any]:
         """Upload small file in single request"""
         try:
             with open(file_path, 'rb') as f:
@@ -234,7 +324,7 @@ class S3Client:
             logger.error(f"Failed to upload small file: {e}")
             raise
     
-    def _upload_large_file(self, file_path: Path, s3_key: str, metadata: Dict[str, str], file_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def _upload_large_file(self, file_path: Path, s3_key: str, metadata: Dict[str, str], file_metadata: Dict[str, Any], tags: Dict[str, str] = None) -> Dict[str, Any]:
         """Upload large file with multipart upload and progress tracking"""
         try:
             file_size = file_metadata['size']

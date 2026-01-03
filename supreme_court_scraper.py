@@ -258,42 +258,15 @@ class SupremeCourtScraper:
                 # Wait for results to load
                 self.page.wait_for_load_state("networkidle")
                 
+                # Wait a bit for any error messages to appear
+                time.sleep(1)
+                
                 # Get page content for validation
                 page_content = self.page.content().lower()
-                print(page_content, "page_content")
+                
                 # Log detailed debugging information
-                logger.info(f"Page title after submission: {self.page.title()}")
-                logger.info(f"Current URL: {self.page.url}")
-                
-                # Log relevant page content snippets for debugging
-                if "captcha" in page_content:
-                    logger.info("CAPTCHA text found in page content")
-                if "error" in page_content:
-                    logger.info("Error text found in page content")
-                if "invalid" in page_content:
-                    logger.info("Invalid text found in page content")
-                if "incorrect" in page_content:
-                    logger.info("Incorrect text found in page content")
-                
-                # Look for specific error messages in the page
-                error_selectors = [
-                    "div.alert-danger",
-                    "div.error",
-                    "span.error",
-                    "div[class*='error']",
-                    "span[class*='error']"
-                ]
-                
-                error_found = False
-                for selector in error_selectors:
-                    error_elements = self.page.locator(selector)
-                    if error_elements.count() > 0:
-                        for i in range(error_elements.count()):
-                            error_text = error_elements.nth(i).text_content()
-                            if error_text and error_text.strip():
-                                logger.info(f"Error element found: {error_text.strip()}")
-                                if "captcha" in error_text.lower():
-                                    error_found = True
+                logger.info(f"[CAPTCHA VALIDATION] Page title: {self.page.title()}")
+                logger.info(f"[CAPTCHA VALIDATION] Current URL: {self.page.url}")
                 
                 # Check for specific CAPTCHA error messages (more precise validation)
                 specific_error_patterns = [
@@ -301,42 +274,123 @@ class SupremeCourtScraper:
                     "captcha code is incorrect", 
                     "invalid captcha",
                     "incorrect captcha",
+                    "wrong captcha",
                     "captcha verification failed",
                     "please enter the captcha correctly",
-                    "captcha does not match"
+                    "captcha does not match",
+                    "captcha mismatch"
                 ]
                 
-                captcha_error_found = any(pattern in page_content for pattern in specific_error_patterns)
+                # Check each pattern
+                captcha_error_found = False
+                for pattern in specific_error_patterns:
+                    if pattern in page_content:
+                        logger.warning(f"[CAPTCHA VALIDATION] ✗ FAILED - Found error pattern: '{pattern}'")
+                        captcha_error_found = True
+                        break
                 
                 if captcha_error_found:
-                    logger.warning("CAPTCHA validation failed - specific error message detected")
+                    logger.warning("[CAPTCHA VALIDATION] ✗ CAPTCHA validation failed - specific error message detected")
                     return False
                 
-                # Additional check: if error elements contain CAPTCHA-related errors
+                # Look for error messages in visible elements
+                error_selectors = [
+                    "div.alert-danger",
+                    "div.error",
+                    "span.error",
+                    "div[class*='error']",
+                    "span[class*='error']",
+                    ".error-message",
+                    "#error",
+                    "[role='alert']"
+                ]
+                
+                error_found = False
+                for selector in error_selectors:
+                    try:
+                        error_elements = self.page.locator(selector)
+                        count = error_elements.count()
+                        if count > 0:
+                            for i in range(count):
+                                try:
+                                    error_elem = error_elements.nth(i)
+                                    if error_elem.is_visible():
+                                        error_text = error_elem.text_content()
+                                        if error_text and error_text.strip():
+                                            error_text_lower = error_text.lower()
+                                            logger.info(f"[CAPTCHA VALIDATION] Error element found: {error_text.strip()}")
+                                            # Check if error is actually about CAPTCHA
+                                            if "captcha" in error_text_lower:
+                                                logger.warning(f"[CAPTCHA VALIDATION] ✗ CAPTCHA error in element: {error_text.strip()}")
+                                                error_found = True
+                                                break
+                                except:
+                                    continue
+                        if error_found:
+                            break
+                    except:
+                        continue
+                
                 if error_found:
-                    logger.warning("CAPTCHA validation failed - error element with CAPTCHA text found")
+                    logger.warning("[CAPTCHA VALIDATION] ✗ CAPTCHA validation failed - error element with CAPTCHA text found")
                     return False
                 
-                # Check if we successfully moved away from the search page
-                # Success usually redirects to results page or changes URL
-                if self.page.url == "https://www.sci.gov.in/judgements-judgement-date/":
-                    # Still on the same search page - check if there are results or if it's an error
-                    results_indicators = [
-                        "table",
-                        "judgment",
-                        "result",
-                        "download",
-                        "pdf"
-                    ]
-                    
-                    has_results = any(indicator in page_content for indicator in results_indicators)
-                    
-                    if not has_results:
-                        logger.warning("CAPTCHA validation failed - no results found on search page")
-                        return False
+                # Check if CAPTCHA input field still exists and is empty (might indicate failed validation)
+                try:
+                    captcha_input = self.page.locator("input[name*='captcha'], input[id*='captcha']").first
+                    if captcha_input.is_visible():
+                        captcha_value = captcha_input.input_value()
+                        if not captcha_value or captcha_value.strip() == "":
+                            logger.warning("[CAPTCHA VALIDATION] ⚠ CAPTCHA input field is empty after submission - possible validation failure")
+                            # This alone is not enough to fail, but it's a warning sign
+                except:
+                    pass
                 
-                logger.info("Form submitted successfully")
-                return True
+                # Check for positive indicators of success
+                success_indicators = [
+                    # Table with results
+                    ("table tbody tr", "Results table with data rows"),
+                    ("table tr td", "Table cells with data"),
+                    ("#cnrresults table", "CNR results table"),
+                    (".distTableContent table", "Results table in container"),
+                ]
+                
+                success_found = False
+                for selector, description in success_indicators:
+                    try:
+                        elements = self.page.locator(selector)
+                        if elements.count() > 0:
+                            logger.info(f"[CAPTCHA VALIDATION] ✓ Found success indicator: {description}")
+                            success_found = True
+                            break
+                    except:
+                        continue
+                
+                if success_found:
+                    logger.info("[CAPTCHA VALIDATION] ✓ SUCCESS - Form submitted successfully and results found")
+                    return True
+                
+                # If no clear success indicators but also no errors, check if we're still on search page
+                if self.page.url == "https://www.sci.gov.in/judgements-judgement-date/":
+                    # Check for generic content indicators
+                    has_content = (
+                        "table" in page_content or
+                        "tbody" in page_content or
+                        "judgment" in page_content or
+                        "diary" in page_content
+                    )
+                    
+                    if has_content:
+                        logger.info("[CAPTCHA VALIDATION] ✓ SUCCESS - Page has judgment-related content")
+                        return True
+                    else:
+                        logger.warning("[CAPTCHA VALIDATION] ⚠ AMBIGUOUS - Still on search page with no clear results")
+                        # Not definitively a failure, but proceed with caution
+                        return True
+                else:
+                    # URL changed, likely successful
+                    logger.info("[CAPTCHA VALIDATION] ✓ SUCCESS - URL changed, likely successful submission")
+                    return True
             else:
                 logger.error("Search button not found")
                 return False
@@ -1239,9 +1293,11 @@ class SupremeCourtScraper:
             logger.error(f"Failed to download {judgment_data.get('file_url', 'unknown')}: {e}")
             return None
     
-    def process_judgment(self, judgment_data: Dict[str, str], date_range: DateRange) -> bool:
-        """Process a single judgment: download, store metadata, upload to S3"""
+    def process_judgment_with_multiple_files(self, judgment_data: Dict[str, str], date_range: DateRange) -> bool:
+        """Process a single judgment with multiple PDF files: download, store metadata, upload to S3"""
         try:
+            logger.info(f"[FILE UPLOAD] Processing judgment: {judgment_data.get('case_number', 'Unknown')}")
+            
             # Create judgment metadata
             judgment = JudgmentMetadata(
                 judgment_id="",  # Will be generated
@@ -1250,13 +1306,27 @@ class SupremeCourtScraper:
                 court_level=1,
                 court_name="Supreme Court of India",
                 jurisdiction="India",
-                # Legacy fields
-                title=judgment_data.get('title'),
-                case_number=judgment_data.get('case_number'),
-                diary_no=judgment_data.get('diary_no'),
-                judge=judgment_data.get('judge'),
-                judgment_date=judgment_data.get('judgment_date'),
-                file_url=judgment_data.get('file_url'),
+                # New schema fields
+                serial_number=judgment_data.get('serial_number', ''),
+                diary_number=judgment_data.get('diary_number') or judgment_data.get('diary_no', ''),
+                case_number=judgment_data.get('case_number', ''),
+                petitioner_respondent=judgment_data.get('petitioner_respondent') or judgment_data.get('title', ''),
+                advocate=judgment_data.get('advocate', ''),
+                bench=judgment_data.get('bench', ''),
+                judgment_by=judgment_data.get('judgment_by') or judgment_data.get('judge', ''),
+                judgment_date=judgment_data.get('judgment_date', ''),
+                # Legacy fields for backward compatibility
+                diary_no=judgment_data.get('diary_number') or judgment_data.get('diary_no', ''),
+                title=judgment_data.get('petitioner_respondent') or judgment_data.get('title', ''),
+                judge=judgment_data.get('judgment_by') or judgment_data.get('judge', ''),
+                # Source URLs
+                file_url=judgment_data.get('pdf_link') or judgment_data.get('file_url'),
+                pdf_link=judgment_data.get('pdf_link') or judgment_data.get('file_url'),
+                pdf_links=judgment_data.get('pdf_links', []),
+                judgment_links=judgment_data.get('judgment_links', []),
+                # Initialize files array
+                files=[],
+                # Search date range
                 search_from_date=date_range.to_string_format()[0],
                 search_to_date=date_range.to_string_format()[1]
             )
@@ -1264,71 +1334,121 @@ class SupremeCourtScraper:
             # Check if already processed
             existing = self.mongo_client.get_judgment(judgment.judgment_id)
             if existing and existing.processing_status == "completed":
-                logger.info(f"Judgment already processed: {judgment.judgment_id}")
+                logger.info(f"[FILE UPLOAD] Judgment already processed: {judgment.judgment_id}")
                 return True
             
-            # Insert/update in database
-            self.mongo_client.insert_judgment(judgment)
+            # Insert initial record in database
+            if not existing:
+                self.mongo_client.insert_judgment(judgment)
+                logger.info(f"[FILE UPLOAD] Created judgment record: {judgment.judgment_id}")
             
-            # NOTE: S3 upload functionality commented out as PDF links are extracted directly
-            # No need to download and upload files since we have direct PDF URLs
+            # Get all PDF links to download
+            pdf_urls = judgment_data.get('pdf_links', []) or judgment_data.get('judgment_links', [])
+            if not pdf_urls:
+                # Fallback to single URL
+                single_url = judgment_data.get('pdf_link') or judgment_data.get('file_url')
+                if single_url:
+                    pdf_urls = [single_url]
             
-            # # Download file
-            # file_path = self.download_judgment_file(judgment_data)
-            # if not file_path:
-            #     self.mongo_client.mark_as_failed(judgment.judgment_id, "Download failed")
-            #     self.stats["failed_downloads"] += 1
-            #     return False
-            # 
-            # # Update with file info
-            # file_info = {
-            #     "file_name": os.path.basename(file_path),
-            #     "file_size": os.path.getsize(file_path),
-            #     "file_type": "pdf"
-            # }
-            # self.mongo_client.mark_as_downloaded(judgment.judgment_id, file_info)
-            # 
-            # # Upload to S3
-            # s3_result = self.s3_client.upload_file(
-            #     file_path,
-            #     judgment.judgment_date,
-            #     judgment.case_number,
-            #     {
-            #         "judgment_id": judgment.judgment_id,
-            #         "title": judgment.title or "Unknown",
-            #         "case_number": judgment.case_number or "Unknown"
-            #     }
-            # )
-            # 
-            # if s3_result:
-            #     # Mark as uploaded
-            #     self.mongo_client.mark_as_uploaded(judgment.judgment_id, s3_result)
-            #     
-            #     # Clean up local file
-            #     try:
-            #         os.remove(file_path)
-            #     except:
-            #         pass
-            #     
-            #     logger.info(f"Successfully processed judgment: {judgment.judgment_id}")
-            #     self.stats["successful_downloads"] += 1
-            #     return True
-            # else:
-            #     self.mongo_client.mark_as_failed(judgment.judgment_id, "S3 upload failed")
-            #     self.stats["upload_failures"] += 1
-            #     return False
+            if not pdf_urls:
+                logger.warning(f"[FILE UPLOAD] No PDF URLs found for judgment: {judgment.judgment_id}")
+                self.mongo_client.mark_as_completed(judgment.judgment_id)
+                return True
             
-            # Mark as completed since we have the PDF URL
-            # Note: Completion is handled in _save_judgments_to_mongodb method
-            logger.info(f"Successfully processed judgment with PDF URL: {judgment.judgment_id}")
-            self.stats["successful_downloads"] += 1
-            return True
+            logger.info(f"[FILE UPLOAD] Found {len(pdf_urls)} PDF file(s) to download")
+            
+            # Process each PDF file
+            files_processed = 0
+            for i, pdf_url in enumerate(pdf_urls, 1):
+                try:
+                    logger.info(f"[FILE UPLOAD] Processing file {i}/{len(pdf_urls)}: {pdf_url}")
+                    
+                    # Download file
+                    file_path = self.download_judgment_file({'file_url': pdf_url})
+                    if not file_path:
+                        logger.warning(f"[FILE UPLOAD] Failed to download file {i}: {pdf_url}")
+                        continue
+                    
+                    # Prepare metadata for S3
+                    s3_metadata = {
+                        "petitioner_respondent": judgment.petitioner_respondent or "Unknown",
+                        "judge": judgment.judgment_by or "Unknown",
+                        "bench": judgment.bench or "Unknown",
+                        "diary_number": judgment.diary_number or "Unknown"
+                    }
+                    
+                    # Upload to S3
+                    s3_result = self.s3_client.upload_file(
+                        file_path,
+                        judgment.judgment_date,
+                        judgment.case_number,
+                        s3_metadata,
+                        court_type="supreme_court"
+                    )
+                    
+                    if s3_result:
+                        # Prepare file info for MongoDB
+                        file_info = {
+                            "source_url": pdf_url,
+                            "file_name": os.path.basename(file_path),
+                            "file_size": os.path.getsize(file_path),
+                            "file_type": "pdf",
+                            "s3_bucket": s3_result.get("bucket"),
+                            "s3_key": s3_result.get("key"),
+                            "s3_url": s3_result.get("url"),
+                            "s3_metadata": s3_result.get("metadata", {}),
+                            "uploaded_date": datetime.utcnow().isoformat(),
+                            "file_hash": s3_result.get("metadata", {}).get("file-hash", ""),
+                            "document_type": f"judgment_{i}" if len(pdf_urls) > 1 else "judgment"
+                        }
+                        
+                        # Add file to judgment's files array
+                        self.mongo_client.add_file_to_judgment(judgment.judgment_id, file_info)
+                        
+                        # Update legacy fields for first file
+                        if i == 1:
+                            self.mongo_client.mark_as_uploaded(judgment.judgment_id, s3_result)
+                        
+                        logger.info(f"[FILE UPLOAD] ✓ Successfully uploaded file {i}/{len(pdf_urls)} to S3: {s3_result.get('key')}")
+                        files_processed += 1
+                    else:
+                        logger.warning(f"[FILE UPLOAD] ✗ Failed to upload file {i} to S3")
+                    
+                    # Clean up local file
+                    try:
+                        os.remove(file_path)
+                        logger.debug(f"[FILE UPLOAD] Cleaned up local file: {file_path}")
+                    except Exception as e:
+                        logger.warning(f"[FILE UPLOAD] Failed to delete local file: {e}")
+                        
+                except Exception as e:
+                    logger.error(f"[FILE UPLOAD] Error processing file {i}: {e}")
+                    continue
+            
+            # Mark as completed
+            if files_processed > 0:
+                self.mongo_client.mark_as_completed(judgment.judgment_id)
+                logger.info(f"[FILE UPLOAD] ✓ Completed processing judgment: {files_processed}/{len(pdf_urls)} files uploaded")
+                self.stats["successful_downloads"] += 1
+                return True
+            else:
+                self.mongo_client.mark_as_failed(judgment.judgment_id, "No files uploaded successfully")
+                logger.error(f"[FILE UPLOAD] ✗ Failed to upload any files for judgment")
+                self.stats["upload_failures"] += 1
+                return False
                 
         except Exception as e:
-            logger.error(f"Failed to process judgment: {e}")
+            logger.error(f"[FILE UPLOAD] Failed to process judgment: {e}")
+            import traceback
+            logger.error(f"[FILE UPLOAD] Traceback: {traceback.format_exc()}")
             if 'judgment' in locals():
                 self.mongo_client.mark_as_failed(judgment.judgment_id, str(e))
+            self.stats["failed_downloads"] += 1
             return False
+    
+    def process_judgment(self, judgment_data: Dict[str, str], date_range: DateRange) -> bool:
+        """Backward compatible wrapper - routes to multiple files handler"""
+        return self.process_judgment_with_multiple_files(judgment_data, date_range)
     
     def process_date_range(self, date_range: DateRange) -> bool:
         """Process all judgments for a specific date range"""
@@ -1368,14 +1488,32 @@ class SupremeCourtScraper:
                 else:
                     logger.info(f"Successfully found {len(judgments)} judgments via direct API calls")
             
-            # Save all judgments to MongoDB with duplicate prevention and HTML cleaning
+            # Process each judgment: download PDFs and upload to S3
             if judgments:
-                success = self._save_judgments_to_mongodb(judgments)
-                if success:
-                    self.stats["total_processed"] += len(judgments)
-                    logger.info(f"Successfully processed {len(judgments)} judgments for date range: {date_range}")
-                else:
-                    logger.warning(f"Failed to save judgments for date range: {date_range}")
+                logger.info(f"Found {len(judgments)} judgments to process for date range: {date_range}")
+                
+                successful = 0
+                failed = 0
+                
+                for i, judgment_data in enumerate(judgments, 1):
+                    try:
+                        logger.info(f"Processing judgment {i}/{len(judgments)}")
+                        
+                        # Process judgment with file download and S3 upload
+                        if self.process_judgment_with_multiple_files(judgment_data, date_range):
+                            successful += 1
+                        else:
+                            failed += 1
+                            
+                    except Exception as e:
+                        logger.error(f"Error processing judgment {i}: {e}")
+                        failed += 1
+                    
+                    # Small delay between processing judgments
+                    time.sleep(1)
+                
+                self.stats["total_processed"] += len(judgments)
+                logger.info(f"Completed processing {len(judgments)} judgments: {successful} successful, {failed} failed")
             else:
                 logger.info(f"No judgments to process for date range: {date_range}")
             
