@@ -324,7 +324,10 @@ class MongoDBClient:
         """Add a file to judgment's files array"""
         try:
             result = self.collection.update_one(
-                {"judgment_id": judgment_id},
+                {
+                    "judgment_id": judgment_id,
+                    "files.file_hash": {"$ne": file_info.get("file_hash")}
+                },
                 {
                     "$push": {"files": file_info},
                     "$set": {"last_updated": datetime.utcnow().isoformat()}

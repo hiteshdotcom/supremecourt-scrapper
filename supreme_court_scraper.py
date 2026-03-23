@@ -1383,7 +1383,7 @@ class SupremeCourtScraper:
 
             # Check if already processed
             existing = self.mongo_client.get_judgment(judgment.judgment_id)
-            if existing and existing.processing_status == "completed":
+            if existing and existing.processing_status in ("completed", "uploaded"):
                 # Only skip if every PDF URL has already been uploaded
                 existing_source_urls = {f.get('source_url') for f in (existing.files or [])}
                 new_urls = [u for u in pdf_urls if u not in existing_source_urls]

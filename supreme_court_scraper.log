@@ -48007,3 +48007,112 @@
 2026-03-23 22:54:58 | INFO     | supreme_court_scraper:process_judgment_with_multiple_files:1415 - [FILE UPLOAD] Found 1 unique PDF file(s) to download
 2026-03-23 22:54:58 | INFO     | supreme_court_scraper:process_judgment_with_multiple_files:1429 - [FILE UPLOAD] Processing file 1/1: https://api.sci.gov.in/supremecourt/2007/21288/21288_2007_14_1501_49652_Judgement_19-Jan-2024.pdf
 2026-03-23 22:54:58 | INFO     | supreme_court_scraper:download_judgment_file:1308 - Downloading: https://api.sci.gov.in/supremecourt/2007/21288/21288_2007_14_1501_49652_Judgement_19-Jan-2024.pdf
+2026-03-24 00:07:35 | INFO     | __main__:main:344 - Supreme Court Judgment Scraper started
+2026-03-24 00:07:35 | INFO     | __main__:main:345 - Arguments: {'run': True, 'stats': False, 'reset_progress': False, 'test_captcha': False, 'resume': False, 'start_year': None, 'end_year': None, 'headless': False, 'no_headless': False, 'log_level': 'INFO', 'log_file': None, 'config': None, 'env_file': '.env'}
+2026-03-24 00:07:35 | INFO     | __main__:validate_environment:85 - Validating environment...
+2026-03-24 00:07:36 | INFO     | mongodb_client:_create_indexes:188 - MongoDB indexes created successfully
+2026-03-24 00:07:36 | INFO     | mongodb_client:_connect:140 - Connected to MongoDB: lexai.judgments
+2026-03-24 00:07:36 | INFO     | mongodb_client:close:480 - MongoDB connection closed
+2026-03-24 00:07:36 | INFO     | __main__:validate_environment:102 - MongoDB connection: OK
+2026-03-24 00:07:36 | INFO     | s3_client:_initialize_client:49 - S3 client initialized successfully for region: ap-south-1
+2026-03-24 00:07:36 | INFO     | s3_client:_ensure_bucket_exists:66 - Bucket lexai-law-judgments exists
+2026-03-24 00:07:36 | INFO     | __main__:validate_environment:111 - S3 connection: OK
+2026-03-24 00:07:36 | INFO     | __main__:validate_environment:116 - Environment validation: PASSED
+2026-03-24 00:07:36 | INFO     | __main__:run_scraper:162 - Initializing Supreme Court judgment scraper...
+2026-03-24 00:07:36 | INFO     | captcha_solver:__init__:26 - CaptchaSolver initialized with: use_manual_input=True, use_openai=True, api_key_provided=True
+2026-03-24 00:07:36 | INFO     | captcha_solver:__init__:42 - OpenAI client initialized successfully
+2026-03-24 00:07:37 | INFO     | mongodb_client:_create_indexes:188 - MongoDB indexes created successfully
+2026-03-24 00:07:37 | INFO     | mongodb_client:_connect:140 - Connected to MongoDB: lexai.judgments
+2026-03-24 00:07:37 | INFO     | s3_client:_initialize_client:49 - S3 client initialized successfully for region: ap-south-1
+2026-03-24 00:07:37 | INFO     | __main__:run_scraper:170 - Starting fresh scraping session...
+2026-03-24 00:07:37 | INFO     | supreme_court_scraper:run:1629 - Starting Supreme Court judgment scraper
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:setup_network_monitoring:104 - Network monitoring setup completed
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:setup_browser:92 - Browser setup completed
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:run:1638 - Processing 25 date ranges
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:run:1645 - Progress: 1/25 - 01-01-2024 to 30-01-2024
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:process_date_range:1544 - Processing date range: 01-01-2024 to 30-01-2024
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:navigate_to_search_page:183 - Navigating to: https://www.sci.gov.in/judgements-judgement-date/
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/style.css
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/select2.min.css
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/images/spinner-24.gif
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/images/spinner-large.svg
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/select2.min.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/datepicker.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/jquery.validate.min.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/ecourt-services-api.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/services/judgements/judgement_date/api.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/style.css
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/select2.min.css
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/style.css (15882 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/select2.min.css (16264 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/datepicker.css
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/select2.min.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/jquery.validate.min.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/ecourt-services-api.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/images/spinner-24.gif
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/images/spinner-large.svg
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/select2.min.js (73144 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/jquery.validate.min.js (24382 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/ecourt-services-api.js (18190 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/datepicker.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/datepicker.css
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-content/mu-plugins/sci-api/services/judgements/judgement_date/api.js
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/images/spinner-large.svg (3407 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/datepicker.js (24317 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/datepicker.css (3969 bytes)
+2026-03-24 00:07:39 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/services/judgements/judgement_date/api.js (188 bytes)
+2026-03-24 00:07:40 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: POST https://www.google-analytics.com/g/collect?v=2&tid=G-BZ6N54FGYB&gtm=45je63j1v9184078205za200zd9184078205&_p=1774291059974&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=572153109.1774291061&ul=en-us&sr=1280x720&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252~118104771&sid=1774291060&sct=1&seg=0&dl=https%3A%2F%2Fwww.sci.gov.in%2Fjudgements-judgement-date%2F&dt=Judgment%20Date%20%7C%20Supreme%20Court%20of%20India%20%7C%20India&_tu=QA&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1093
+2026-03-24 00:07:41 | INFO     | supreme_court_scraper:navigate_to_search_page:191 - Successfully navigated to search page
+2026-03-24 00:07:41 | INFO     | supreme_court_scraper:fill_search_form:206 - Filling search form: 01-01-2024 to 30-01-2024
+2026-03-24 00:07:45 | INFO     | supreme_court_scraper:fill_search_form:226 - Search form filled successfully
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha:301 - CAPTCHA solving attempt 1/3
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha:304 - Current config: use_openai=True, openai_client_available=True, use_manual_input=True
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha:311 - Attempting to solve CAPTCHA with OpenAI...
+2026-03-24 00:07:45 | INFO     | captcha_solver:get_captcha_image:228 - CAPTCHA image captured successfully
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha_with_openai:118 - [OpenAI CAPTCHA] Starting attempt (retry: 0)
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha_with_openai:128 - [OpenAI CAPTCHA] Image size: 3717 bytes
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha_with_openai:134 - [OpenAI CAPTCHA] Saved image to captcha_openai_attempt_0.png
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha_with_openai:140 - [OpenAI CAPTCHA] Base64 encoded, length: 4956
+2026-03-24 00:07:45 | INFO     | captcha_solver:solve_captcha_with_openai:155 - [OpenAI CAPTCHA] Sending request to OpenAI API...
+2026-03-24 00:07:48 | INFO     | captcha_solver:solve_captcha_with_openai:181 - [OpenAI CAPTCHA] Received response from OpenAI
+2026-03-24 00:07:48 | INFO     | captcha_solver:solve_captcha_with_openai:185 - [OpenAI CAPTCHA] Raw response: '7'
+2026-03-24 00:07:48 | INFO     | captcha_solver:solve_captcha_with_openai:189 - [OpenAI CAPTCHA] Cleaned response: '7'
+2026-03-24 00:07:48 | INFO     | captcha_solver:solve_captcha_with_openai:198 - [OpenAI CAPTCHA] ✓ Detected numeric answer (likely math): '7'
+2026-03-24 00:07:48 | INFO     | captcha_solver:solve_captcha_with_openai:202 - [OpenAI CAPTCHA] ✓ SUCCESS - Solution: '7'
+2026-03-24 00:07:48 | INFO     | captcha_solver:solve_captcha:321 - [OpenAI CAPTCHA] ✓ Success on attempt 1/2
+2026-03-24 00:07:48 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: POST https://www.google-analytics.com/g/collect?v=2&tid=G-BZ6N54FGYB&gtm=45je63j1v9184078205za200zd9184078205&_p=1774291059974&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=572153109.1774291061&ul=en-us&sr=1280x720&frm=0&pscdl=noapi&_eu=AEEAAAQ&_s=2&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252~118104771&sid=1774291060&sct=1&seg=0&dl=https%3A%2F%2Fwww.sci.gov.in%2Fjudgements-judgement-date%2F&dt=Judgment%20Date%20%7C%20Supreme%20Court%20of%20India%20%7C%20India&_tu=QA&en=form_start&ep.form_id=sciapi-services-judgements-judgement-date&ep.form_name=&ep.form_destination=https%3A%2F%2Fwww.sci.gov.in%2Fjudgements-judgement-date%2F%23&epn.form_length=107&ep.first_field_id=from_date&ep.first_field_name=from_date&ep.first_field_type=text&epn.first_field_position=1&_et=3082&tfd=9182
+2026-03-24 00:07:50 | INFO     | captcha_solver:enter_captcha_text:408 - CAPTCHA text entered: '7'
+2026-03-24 00:07:50 | INFO     | supreme_court_scraper:_handle_request:116 - Captured request: GET https://www.sci.gov.in/wp-admin/admin-ajax.php?from_date=01-01-2024&to_date=30-01-2024&scid=sllmqhswaxuadzzhbfxkvfuuc49r2bkg1es36586&tok_855897c1c5aa6d5a564a16d43025bd299dc304eb=c626cb47375d7494cb884661ce045382795db342&siwp_captcha_value=7&es_ajax_request=1&submit=Search&action=get_judgements_judgement_date&language=en
+2026-03-24 00:07:51 | INFO     | supreme_court_scraper:_handle_response:135 - Captured response: 200 https://www.sci.gov.in/wp-admin/admin-ajax.php?from_date=01-01-2024&to_date=30-01-2024&scid=sllmqhswaxuadzzhbfxkvfuuc49r2bkg1es36586&tok_855897c1c5aa6d5a564a16d43025bd299dc304eb=c626cb47375d7494cb884661ce045382795db342&siwp_captcha_value=7&es_ajax_request=1&submit=Search&action=get_judgements_judgement_date&language=en
+2026-03-24 00:07:51 | INFO     | supreme_court_scraper:_handle_response:155 - Captured response body from https://www.sci.gov.in/wp-admin/admin-ajax.php?from_date=01-01-2024&to_date=30-01-2024&scid=sllmqhswaxuadzzhbfxkvfuuc49r2bkg1es36586&tok_855897c1c5aa6d5a564a16d43025bd299dc304eb=c626cb47375d7494cb884661ce045382795db342&siwp_captcha_value=7&es_ajax_request=1&submit=Search&action=get_judgements_judgement_date&language=en (102982 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:solve_and_submit_captcha:268 - [CAPTCHA VALIDATION] Page title: Judgment Date | Supreme Court of India | India
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:solve_and_submit_captcha:269 - [CAPTCHA VALIDATION] Current URL: https://www.sci.gov.in/judgements-judgement-date/
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:solve_and_submit_captcha:363 - [CAPTCHA VALIDATION] ✓ Found success indicator: Results table with data rows
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:solve_and_submit_captcha:370 - [CAPTCHA VALIDATION] ✓ SUCCESS - Form submitted successfully and results found
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:676 - Processing 10 captured network responses
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/style.css (15882 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/css/select2.min.css (16264 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/select2.min.js (71821 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/jquery.validate.min.js (24381 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/ecourt-services-api.js (18190 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/assets/js/datepicker.js (24317 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-content/mu-plugins/sci-api/services/judgements/judgement_date/api.js (188 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:728 - Found 0 tables in response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:695 - Processing API response from https://www.sci.gov.in/wp-admin/admin-ajax.php?from_date=01-01-2024&to_date=30-01-2024&scid=sllmqhswaxuadzzhbfxkvfuuc49r2bkg1es36586&tok_855897c1c5aa6d5a564a16d43025bd299dc304eb=c626cb47375d7494cb884661ce045382795db342&siwp_captcha_value=7&es_ajax_request=1&submit=Search&action=get_judgements_judgement_date&language=en (102982 bytes)
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_parse_json_for_judgments:764 - Found resultsHtml with 96860 characters
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_parse_json_for_judgments:770 - Extracted 83 judgments from resultsHtml
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:_extract_from_network_responses:716 - Extracted 83 judgments from JSON response
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:process_date_range:1581 - Found 83 judgments to process for date range: 01-01-2024 to 30-01-2024
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:process_date_range:1588 - Processing judgment 1/83
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:process_judgment_with_multiple_files:1341 - [FILE UPLOAD] Processing judgment: C.A. No.-009098-009098 - 2013
+2026-03-24 00:07:52 | INFO     | mongodb_client:insert_judgment:197 - Inserted judgment: 9ccb13f25cbf968eeabbd461d123ee29
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:process_judgment_with_multiple_files:1399 - [FILE UPLOAD] Created judgment record: 9ccb13f25cbf968eeabbd461d123ee29
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:process_judgment_with_multiple_files:1415 - [FILE UPLOAD] Found 1 unique PDF file(s) to download
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:process_judgment_with_multiple_files:1429 - [FILE UPLOAD] Processing file 1/1: https://api.sci.gov.in/supremecourt/2011/228/228_2011_7_1501_49155_Judgement_02-Jan-2024.pdf
+2026-03-24 00:07:52 | INFO     | supreme_court_scraper:download_judgment_file:1308 - Downloading: https://api.sci.gov.in/supremecourt/2011/228/228_2011_7_1501_49155_Judgement_02-Jan-2024.pdf
