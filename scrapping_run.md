@@ -99,3 +99,19 @@
   ---
   Restart=always with RestartSec=30 means if the script crashes (network error, CAPTCHA failure, etc.) it will
   automatically restart after 30 seconds and continue from where it left off (via date_progress.json).
+
+
+
+Reload and restart:                                                                                                   
+  sudo systemctl daemon-reload
+  sudo systemctl restart supreme-court-scraper                                                                             
+  sudo journalctl -u supreme-court-scraper -f               
+
+  ---                                                                                                                      
+  Quick way to verify paths before editing the service:
+  cd ~/supremecourt-scrapper                                                                                               
+  echo "WorkingDirectory: $(pwd)"                           
+  echo "Python path: $(pwd)/venv/bin/python"                                                                               
+  ls venv/bin/python   # confirm it exists                                                                                 
+  ls main.py           # confirm main.py is here
+                                                  
