@@ -132,12 +132,18 @@ class S3Client:
             clean_case = clean_case.replace('/', '_').replace(' ', '_')
             case_folder = clean_case
         
-        # Generate filename with date
-        filename = f"judgment_{date_str}.{file_extension}"
-        
+        # Use the original filename (cleaned) so multiple files per case don't collide
+        if clean_filename and '.' in clean_filename:
+            # Keep the original filename but sanitise it
+            base_name = clean_filename.rsplit('.', 1)[0]
+            filename = f"{base_name}.{file_extension}"
+        else:
+            # Fallback when original filename is empty/unusable
+            filename = f"judgment_{date_str}.{file_extension}"
+
         # Create hierarchical folder structure
         folder_path = f"{court_type}/{year}/{case_folder}/"
-        
+
         # Combine prefix, folder path, and filename
         s3_key = f"{self.config.folder_prefix}{folder_path}{filename}"
         

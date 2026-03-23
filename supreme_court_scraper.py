@@ -493,65 +493,83 @@ class SupremeCourtScraper:
                         judgment_cell = cells[6]
                     
                     logger.debug(f"Row {i+1}: Case {case_number}, Diary {diary_no}, Cells: {len(cells)}")
-                    pdf_links = judgment_cell.find_all('a', href=True)
-                    
-                    logger.debug(f"Row {i+1}: Found {len(pdf_links)} links in judgment cell")
-                    
-                    for j, link in enumerate(pdf_links):
+                    pdf_link_elements = judgment_cell.find_all('a', href=True)
+
+                    logger.debug(f"Row {i+1}: Found {len(pdf_link_elements)} links in judgment cell")
+
+                    # Collect ALL valid PDF links for this row into one judgment entry
+                    import re
+                    valid_pdf_links = []
+                    judgment_date = ''
+
+                    for j, link in enumerate(pdf_link_elements):
                         href = link.get('href')
                         link_text = link.get_text(strip=True)
-                        
+
                         logger.debug(f"Row {i+1}, Link {j+1}: href='{href}', text='{link_text}'")
-                        
+
                         # Filter for valid PDF links (more permissive)
-                        if href and (href.strip() != '' and 
-                                   ('.pdf' in href.lower() or 
-                                    'api.sci.gov.in' in href or 
+                        if href and (href.strip() != '' and
+                                   ('.pdf' in href.lower() or
+                                    'api.sci.gov.in' in href or
                                     'supremecourt' in href.lower())):
-                            
+
                             # Skip empty or placeholder links
                             if href.strip() == 'https://api.sci.gov.in/' or not link_text:
                                 logger.debug(f"Row {i+1}, Link {j+1}: Skipping placeholder link")
                                 continue
-                            
-                            # Extract judgment date from link text
-                            judgment_date = ''
-                            
-                            # Try to extract date from link text (format: DD-MM-YYYY)
-                            import re
-                            date_match = re.search(r'(\d{2}-\d{2}-\d{4})', link_text)
-                            if date_match:
-                                judgment_date = date_match.group(1)
-                            
-                            judgment_data = {
-                                'serial_no': serial_no,
-                                'diary_no': diary_no,
-                                'case_number': case_number,
-                                'title': petitioner_respondent,
-                                'advocate': advocate,
-                                'bench': bench,
-                                'judge': judgment_by,
-                                'judgment_date': judgment_date,
-                                'file_url': href.strip(),
-                                'link_text': link_text
-                            }
-                            
-                            logger.info(f"Found valid judgment: {case_number} - {judgment_date} - {href}")
-                            judgments.append(judgment_data)
+
+                            # Extract judgment date from the first valid link
+                            if not judgment_date:
+                                date_match = re.search(r'(\d{2}-\d{2}-\d{4})', link_text)
+                                if date_match:
+                                    judgment_date = date_match.group(1)
+
+                            valid_pdf_links.append(href.strip())
+
+                    # Deduplicate while preserving order
+                    seen_urls = set()
+                    deduped_pdf_links = []
+                    for url in valid_pdf_links:
+                        if url not in seen_urls:
+                            seen_urls.add(url)
+                            deduped_pdf_links.append(url)
+                    valid_pdf_links = deduped_pdf_links
+
+                    # Create ONE judgment entry per row with all its PDF links
+                    if valid_pdf_links:
+                        judgment_data = {
+                            'serial_no': serial_no,
+                            'diary_no': diary_no,
+                            'case_number': case_number,
+                            'title': petitioner_respondent,
+                            'advocate': advocate,
+                            'bench': bench,
+                            'judge': judgment_by,
+                            'judgment_date': judgment_date,
+                            'file_url': valid_pdf_links[0],      # Primary link (legacy)
+                            'pdf_link': valid_pdf_links[0],      # Primary link (legacy)
+                            'pdf_links': valid_pdf_links,         # All links
+                            'judgment_links': valid_pdf_links,    # All links
+                        }
+
+                        logger.info(f"Found judgment: {case_number} - {judgment_date} - {len(valid_pdf_links)} file(s)")
+                        judgments.append(judgment_data)
                             
                 except Exception as e:
                     logger.warning(f"Failed to parse table row: {e}")
                     continue
             
-            # Remove duplicates based on URL
-            seen_urls = set()
+            # Remove duplicates based on case_number (each row is now one judgment entry)
+            seen_cases = set()
             unique_judgments = []
             for judgment in judgments:
-                if judgment['file_url'] not in seen_urls:
-                    seen_urls.add(judgment['file_url'])
+                key = (judgment.get('case_number', ''), judgment.get('diary_no', ''))
+                if key not in seen_cases:
+                    seen_cases.add(key)
                     unique_judgments.append(judgment)
-            
-            logger.info(f"Found {len(unique_judgments)} unique judgment links")
+
+            logger.info(f"Found {len(unique_judgments)} unique judgments")
             return unique_judgments
             
         except Exception as e:
@@ -927,6 +945,16 @@ class SupremeCourtScraper:
                             if not primary_pdf_link:
                                 primary_pdf_link = pdf_url
                 
+                # Deduplicate links while preserving order
+                seen = set()
+                unique_pdf_links = []
+                for url in pdf_links:
+                    if url not in seen:
+                        seen.add(url)
+                        unique_pdf_links.append(url)
+                pdf_links = unique_pdf_links
+                judgment_links = unique_pdf_links
+
                 # Store all links
                 if pdf_links:
                     judgment['pdf_links'] = pdf_links
@@ -1096,7 +1124,21 @@ class SupremeCourtScraper:
                     
                     if existing_id:
                         duplicate_count += 1
-                        logger.info(f"Duplicate judgment found, skipping: {case_number} (existing ID: {existing_id})")
+                        # Merge any new PDF links into the existing record
+                        new_pdf_links = cleaned_judgment.get('pdf_links') or []
+                        if new_pdf_links:
+                            existing_record = self.mongo_client.get_judgment(existing_id)
+                            if existing_record:
+                                existing_links = set(existing_record.pdf_links or [])
+                                additional_links = [l for l in new_pdf_links if l not in existing_links]
+                                if additional_links:
+                                    merged = list(existing_links) + additional_links
+                                    self.mongo_client.update_judgment(existing_id, {
+                                        'pdf_links': merged,
+                                        'judgment_links': merged
+                                    })
+                                    logger.info(f"Merged {len(additional_links)} new PDF link(s) into existing judgment: {existing_id}")
+                        logger.info(f"Duplicate judgment found, skipping insert: {case_number} (existing ID: {existing_id})")
                         continue
                     
                     # Generate unique judgment ID
@@ -1125,9 +1167,9 @@ class SupremeCourtScraper:
                         bench=cleaned_judgment.get('bench', ''),
                         judgment_by=cleaned_judgment.get('judgment_by', ''),
                         judgment_date=judgment_date,
-                        # Multiple PDF links support
-                        pdf_links=cleaned_judgment.get('pdf_links', []),
-                        judgment_links=cleaned_judgment.get('judgment_links', []),
+                        # Multiple PDF links support (deduplicated)
+                        pdf_links=list(dict.fromkeys(cleaned_judgment.get('pdf_links', []))),
+                        judgment_links=list(dict.fromkeys(cleaned_judgment.get('judgment_links', []))),
                         # Legacy fields for backward compatibility
                         diary_no=diary_no,
                         title=cleaned_judgment.get('petitioner_respondent', ''),
@@ -1331,17 +1373,6 @@ class SupremeCourtScraper:
                 search_to_date=date_range.to_string_format()[1]
             )
             
-            # Check if already processed
-            existing = self.mongo_client.get_judgment(judgment.judgment_id)
-            if existing and existing.processing_status == "completed":
-                logger.info(f"[FILE UPLOAD] Judgment already processed: {judgment.judgment_id}")
-                return True
-            
-            # Insert initial record in database
-            if not existing:
-                self.mongo_client.insert_judgment(judgment)
-                logger.info(f"[FILE UPLOAD] Created judgment record: {judgment.judgment_id}")
-            
             # Get all PDF links to download
             pdf_urls = judgment_data.get('pdf_links', []) or judgment_data.get('judgment_links', [])
             if not pdf_urls:
@@ -1349,26 +1380,74 @@ class SupremeCourtScraper:
                 single_url = judgment_data.get('pdf_link') or judgment_data.get('file_url')
                 if single_url:
                     pdf_urls = [single_url]
+
+            # Check if already processed
+            existing = self.mongo_client.get_judgment(judgment.judgment_id)
+            if existing and existing.processing_status == "completed":
+                # Only skip if every PDF URL has already been uploaded
+                existing_source_urls = {f.get('source_url') for f in (existing.files or [])}
+                new_urls = [u for u in pdf_urls if u not in existing_source_urls]
+                if not new_urls:
+                    logger.info(f"[FILE UPLOAD] Judgment already fully processed: {judgment.judgment_id}")
+                    return True
+                logger.info(f"[FILE UPLOAD] Found {len(new_urls)} new file(s) to add to existing judgment: {judgment.judgment_id}")
+                pdf_urls = new_urls
+
+            # Insert initial record in database
+            if not existing:
+                self.mongo_client.insert_judgment(judgment)
+                logger.info(f"[FILE UPLOAD] Created judgment record: {judgment.judgment_id}")
             
             if not pdf_urls:
                 logger.warning(f"[FILE UPLOAD] No PDF URLs found for judgment: {judgment.judgment_id}")
                 self.mongo_client.mark_as_completed(judgment.judgment_id)
                 return True
             
-            logger.info(f"[FILE UPLOAD] Found {len(pdf_urls)} PDF file(s) to download")
-            
+            # Deduplicate pdf_urls by URL, preserving order
+            seen_pdf_urls = set()
+            unique_pdf_urls = []
+            for u in pdf_urls:
+                if u not in seen_pdf_urls:
+                    seen_pdf_urls.add(u)
+                    unique_pdf_urls.append(u)
+            pdf_urls = unique_pdf_urls
+
+            logger.info(f"[FILE UPLOAD] Found {len(pdf_urls)} unique PDF file(s) to download")
+
+            # Build a set of already-uploaded file hashes to catch content-level duplicates
+            existing_record = self.mongo_client.get_judgment(judgment.judgment_id)
+            uploaded_hashes = {
+                f.get('file_hash') for f in (existing_record.files if existing_record else []) or []
+                if f.get('file_hash')
+            }
+
             # Process each PDF file
             files_processed = 0
+            files_skipped_duplicate = 0
             for i, pdf_url in enumerate(pdf_urls, 1):
                 try:
                     logger.info(f"[FILE UPLOAD] Processing file {i}/{len(pdf_urls)}: {pdf_url}")
-                    
+
                     # Download file
                     file_path = self.download_judgment_file({'file_url': pdf_url})
                     if not file_path:
                         logger.warning(f"[FILE UPLOAD] Failed to download file {i}: {pdf_url}")
                         continue
-                    
+
+                    # Compute file hash before uploading to detect content duplicates
+                    import hashlib
+                    with open(file_path, 'rb') as fh:
+                        file_hash = hashlib.md5(fh.read()).hexdigest()
+
+                    if file_hash in uploaded_hashes:
+                        logger.info(f"[FILE UPLOAD] Skipping file {i} — identical content already uploaded (hash: {file_hash})")
+                        files_skipped_duplicate += 1
+                        try:
+                            os.remove(file_path)
+                        except Exception:
+                            pass
+                        continue
+
                     # Prepare metadata for S3
                     s3_metadata = {
                         "petitioner_respondent": judgment.petitioner_respondent or "Unknown",
@@ -1376,7 +1455,7 @@ class SupremeCourtScraper:
                         "bench": judgment.bench or "Unknown",
                         "diary_number": judgment.diary_number or "Unknown"
                     }
-                    
+
                     # Upload to S3
                     s3_result = self.s3_client.upload_file(
                         file_path,
@@ -1385,8 +1464,11 @@ class SupremeCourtScraper:
                         s3_metadata,
                         court_type="supreme_court"
                     )
-                    
+
                     if s3_result:
+                        # Track hash so subsequent files in this batch are also checked
+                        uploaded_hashes.add(file_hash)
+
                         # Prepare file info for MongoDB
                         file_info = {
                             "source_url": pdf_url,
@@ -1398,7 +1480,7 @@ class SupremeCourtScraper:
                             "s3_url": s3_result.get("url"),
                             "s3_metadata": s3_result.get("metadata", {}),
                             "uploaded_date": datetime.utcnow().isoformat(),
-                            "file_hash": s3_result.get("metadata", {}).get("file-hash", ""),
+                            "file_hash": file_hash,
                             "document_type": f"judgment_{i}" if len(pdf_urls) > 1 else "judgment"
                         }
                         
@@ -1428,7 +1510,13 @@ class SupremeCourtScraper:
             # Mark as completed
             if files_processed > 0:
                 self.mongo_client.mark_as_completed(judgment.judgment_id)
-                logger.info(f"[FILE UPLOAD] ✓ Completed processing judgment: {files_processed}/{len(pdf_urls)} files uploaded")
+                logger.info(f"[FILE UPLOAD] ✓ Completed: {files_processed} uploaded, {files_skipped_duplicate} skipped (duplicate content)")
+                self.stats["successful_downloads"] += 1
+                return True
+            elif files_skipped_duplicate == len(pdf_urls):
+                # All files were content-duplicates already on S3 — still a success
+                self.mongo_client.mark_as_completed(judgment.judgment_id)
+                logger.info(f"[FILE UPLOAD] ✓ All {files_skipped_duplicate} file(s) already uploaded (duplicate content), marking complete")
                 self.stats["successful_downloads"] += 1
                 return True
             else:
