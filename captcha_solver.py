@@ -127,11 +127,12 @@ class CaptchaSolver:
             
             logger.info(f"[OpenAI CAPTCHA] Image size: {len(image_bytes)} bytes")
             
-            # Save CAPTCHA image for debugging
+            # Save CAPTCHA image for debugging (overwrite fixed filename to avoid accumulation)
             try:
-                with open(f"captcha_openai_attempt_{retry_count}.png", "wb") as f:
+                debug_image_path = "captcha_openai_attempt_0.png"
+                with open(debug_image_path, "wb") as f:
                     f.write(image_bytes)
-                logger.info(f"[OpenAI CAPTCHA] Saved image to captcha_openai_attempt_{retry_count}.png")
+                logger.info(f"[OpenAI CAPTCHA] Saved image to {debug_image_path}")
             except Exception as e:
                 logger.warning(f"[OpenAI CAPTCHA] Could not save debug image: {e}")
             

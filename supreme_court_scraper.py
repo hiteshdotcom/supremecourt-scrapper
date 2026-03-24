@@ -1505,6 +1505,13 @@ class SupremeCourtScraper:
                         
                 except Exception as e:
                     logger.error(f"[FILE UPLOAD] Error processing file {i}: {e}")
+                    # Clean up local file even on exception to prevent disk fill
+                    if 'file_path' in locals() and file_path and os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                            logger.debug(f"[FILE UPLOAD] Cleaned up local file after error: {file_path}")
+                        except Exception:
+                            pass
                     continue
             
             # Mark as completed
