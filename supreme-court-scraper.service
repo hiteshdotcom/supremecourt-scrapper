@@ -1,0 +1,17 @@
+[Unit]
+Description=Supreme Court Judgment Scraper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/supremecourt-scrapper
+ExecStart=/home/ubuntu/supremecourt-scrapper/venv/bin/python main.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
