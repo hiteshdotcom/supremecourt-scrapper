@@ -72,18 +72,44 @@ class DateManager:
         return len(self.get_all_date_ranges())
     
     def save_progress(self, completed_ranges: List[DateRange], failed_ranges: List[DateRange] = None):
-        """Save progress to file"""
+        """Save progress to file.
+
+        Merges with whatever is already on disk so progress is cumulative across
+        restarts. The scraper's run loop starts each session with an empty
+        completed list, so without merging here every restart (e.g. a systemd
+        auto-restart) would discard previously completed ranges and re-scrape them.
+        """
         if failed_ranges is None:
             failed_ranges = []
-            
+
+        def key(r: DateRange):
+            return (r.start_date, r.end_date)
+
+        existing_completed, existing_failed = self.load_progress()
+
+        # Union of previously-completed and newly-completed ranges.
+        completed_map = {key(r): r for r in existing_completed}
+        for r in completed_ranges:
+            completed_map[key(r)] = r
+        completed_keys = set(completed_map.keys())
+
+        # Keep failed ranges only if they have not since completed.
+        failed_map = {key(r): r for r in existing_failed if key(r) not in completed_keys}
+        for r in failed_ranges:
+            if key(r) not in completed_keys:
+                failed_map[key(r)] = r
+
+        merged_completed = list(completed_map.values())
+        merged_failed = list(failed_map.values())
+
         progress_data = {
-            "completed_ranges": [r.to_dict() for r in completed_ranges],
-            "failed_ranges": [r.to_dict() for r in failed_ranges],
+            "completed_ranges": [r.to_dict() for r in merged_completed],
+            "failed_ranges": [r.to_dict() for r in merged_failed],
             "last_updated": datetime.now().isoformat(),
-            "total_completed": len(completed_ranges),
-            "total_failed": len(failed_ranges)
+            "total_completed": len(merged_completed),
+            "total_failed": len(merged_failed)
         }
-        
+
         with open(self.progress_file, 'w') as f:
             json.dump(progress_data, f, indent=2)
     

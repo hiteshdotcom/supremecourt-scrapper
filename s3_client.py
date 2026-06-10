@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime
 import mimetypes
+import math
 from loguru import logger
 from config import S3Config
 import hashlib

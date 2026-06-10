@@ -2,7 +2,7 @@ from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure, DuplicateKeyError, PyMongoError
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 import hashlib
 from loguru import logger
 from config import MongoConfig
@@ -99,9 +99,12 @@ class JudgmentMetadata:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'JudgmentMetadata':
         """Create from dictionary"""
-        # Remove MongoDB's _id field if present
-        data = {k: v for k, v in data.items() if k != '_id'}
-        
+        # Keep only keys that are actual dataclass fields. Stored documents may carry
+        # extra keys (e.g. MongoDB's _id, or `last_updated` added on update) that the
+        # constructor does not accept.
+        valid_keys = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in valid_keys}
+
         # Convert ISO string back to datetime
         if isinstance(data.get('scraped_date'), str):
             data['scraped_date'] = datetime.fromisoformat(data['scraped_date'])

@@ -1,1 +1,17 @@
+# Secrets
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Runtime artifacts
+*.log
+downloads/
+captcha_openai_attempt_*.png
+temp_captcha.png
+
+# Local scraping progress (each environment keeps its own)
+date_progress.json

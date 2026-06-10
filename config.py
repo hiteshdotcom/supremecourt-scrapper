@@ -49,7 +49,7 @@ class CaptchaConfig:
     use_manual_input: bool = os.getenv("CAPTCHA_USE_MANUAL_INPUT", "true").lower() == "true"
     use_openai: bool = os.getenv("CAPTCHA_USE_OPENAI", "false").lower() == "true"
     ocr_confidence_threshold: float = float(os.getenv("CAPTCHA_OCR_CONFIDENCE_THRESHOLD", "0.7"))
-    max_captcha_attempts: int = int(os.getenv("CAPTCHA_MAX_ATTEMPTS", "3"))
+    max_captcha_attempts: int = int(os.getenv("CAPTCHA_MAX_ATTEMPTS", "5"))
     # OpenAI configuration
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

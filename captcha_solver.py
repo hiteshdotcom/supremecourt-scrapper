@@ -3,6 +3,7 @@ import numpy as np
 import pytesseract
 from PIL import Image
 import io
+import re
 import base64
 from typing import Optional, Tuple
 from playwright.sync_api import Page
@@ -193,7 +194,26 @@ class CaptchaSolver:
             if len(captcha_text) < 1:
                 logger.warning(f"[OpenAI CAPTCHA] Extracted text too short: '{captcha_text}'")
                 return None
-            
+
+            # Reject refusals / non-answers. A valid SCI captcha answer is a short
+            # math result or short alphanumeric code, never a sentence. If the model
+            # returned a long string or an explicit refusal, treat it as a failure so
+            # we retry with a fresh captcha instead of submitting garbage.
+            refusal_markers = ("unable", "cannot", "sorry", "please", "i'm", "help", "analyze")
+            if len(captcha_text) > 10 or any(m in raw_response.lower() for m in refusal_markers):
+                logger.warning(f"[OpenAI CAPTCHA] Response looks like a refusal/non-answer, rejecting: '{raw_response[:80]}'")
+                return None
+
+            # The SCI captcha is a simple arithmetic expression. If the model echoed the
+            # expression (e.g. "6 + 3") instead of computing it, evaluate it ourselves so
+            # we submit the number the server expects.
+            math_match = re.fullmatch(r"\s*(\d{1,3})\s*([+\-x*])\s*(\d{1,3})\s*", raw_response)
+            if math_match:
+                a, op, b = int(math_match.group(1)), math_match.group(2), int(math_match.group(3))
+                computed = a + b if op == "+" else (a - b if op == "-" else a * b)
+                logger.info(f"[OpenAI CAPTCHA] Evaluated expression '{raw_response.strip()}' = {computed}")
+                captcha_text = str(computed)
+
             # Log whether this looks like a math result or text
             if captcha_text.isdigit():
                 logger.info(f"[OpenAI CAPTCHA] ✓ Detected numeric answer (likely math): '{captcha_text}'")
@@ -210,25 +230,64 @@ class CaptchaSolver:
             return None
     
     def get_captcha_image(self, page: Page) -> Optional[bytes]:
-        """Extract CAPTCHA image from the page"""
+        """Extract CAPTCHA image from the page.
+
+        The SCI judgments page renders the real captcha image (img.siwp_captcha_image)
+        but keeps it visually hidden behind a small loader spinner. Both elements match
+        a generic "captcha" selector, so an element screenshot of the first *visible*
+        match grabs the spinner, not the captcha. Instead we locate the real captcha
+        <img>, wait for it to finish loading, and read its already-decoded pixels via a
+        canvas (this needs no visibility and never triggers a fresh captcha request).
+        """
         try:
-            # Wait for CAPTCHA image to load
-            captcha_selector = "img[src*='captcha'], img[alt*='captcha'], img[id*='captcha'], .captcha img"
-            page.wait_for_selector(captcha_selector, timeout=10000)
-            
-            # Get the CAPTCHA image element
-            captcha_element = page.locator(captcha_selector).first
-            
-            if not captcha_element.is_visible():
-                logger.warning("CAPTCHA image not visible")
-                return None
-            
-            # Take screenshot of the CAPTCHA element
-            image_bytes = captcha_element.screenshot()
-            
-            logger.info("CAPTCHA image captured successfully")
+            real_selector = "img.siwp_captcha_image, img[id*='siwp_captcha']"
+            generic_selector = "img[src*='captcha'], img[alt*='captcha'], img[id*='captcha'], .captcha img"
+
+            # Prefer the real SIWP captcha image; fall back to the generic selector.
+            selector = real_selector
+            try:
+                page.wait_for_selector(real_selector, state="attached", timeout=20000)
+            except Exception:
+                page.wait_for_selector(generic_selector, state="attached", timeout=10000)
+                selector = generic_selector
+
+            element = page.locator(selector).first
+
+            # Wait until the image has actually decoded (otherwise the canvas is blank).
+            try:
+                element.evaluate(
+                    "e => new Promise((resolve) => {"
+                    "  if (e.complete && e.naturalWidth > 0) return resolve(true);"
+                    "  e.addEventListener('load', () => resolve(true), {once:true});"
+                    "  setTimeout(() => resolve(e.naturalWidth > 0), 8000);"
+                    "})"
+                )
+            except Exception:
+                pass
+
+            # Read the decoded pixels via a canvas -> PNG data URL.
+            data_url = element.evaluate(
+                "e => {"
+                "  if (!e.naturalWidth) return null;"
+                "  const c = document.createElement('canvas');"
+                "  c.width = e.naturalWidth; c.height = e.naturalHeight;"
+                "  c.getContext('2d').drawImage(e, 0, 0);"
+                "  return c.toDataURL('image/png');"
+                "}"
+            )
+
+            if data_url:
+                image_bytes = base64.b64decode(data_url.split(",", 1)[1])
+                logger.info("CAPTCHA image captured successfully (canvas)")
+                return image_bytes
+
+            # Fallback: try a direct element screenshot if the canvas approach failed.
+            logger.warning("Canvas extraction returned no data, falling back to element screenshot")
+            element.scroll_into_view_if_needed(timeout=5000)
+            image_bytes = element.screenshot()
+            logger.info("CAPTCHA image captured successfully (screenshot)")
             return image_bytes
-            
+
         except Exception as e:
             logger.error(f"Failed to capture CAPTCHA image: {e}")
             return None

@@ -230,15 +230,133 @@ class SupremeCourtScraper:
             logger.error(f"Failed to fill search form: {e}")
             return False
     
+    def _refresh_captcha_and_wait(self):
+        """Trigger the site's CAPTCHA refresh and wait for the new image to load.
+
+        On a wrong CAPTCHA the site itself clicks .captcha-refresh-btn, which loads a
+        fresh image and updates the hidden `scid` field. We replicate that and wait so
+        the next attempt reads a CAPTCHA whose id matches what the server expects.
+        """
+        try:
+            self.page.evaluate(
+                "() => { const b = document.querySelector('.captcha-refresh-btn'); if (b) b.click(); }"
+            )
+            time.sleep(2)
+        except Exception as e:
+            logger.debug(f"CAPTCHA refresh failed: {e}")
+
+    def _submit_search_ajax(self) -> Optional[dict]:
+        """Submit the search via the site's own AJAX endpoint and return the result.
+
+        The browser form-submit path is unreliable (jQuery-validate's submitHandler
+        does not reliably fire under automation), so we replicate exactly what
+        ajax_call_services_form() does: serialize the form and GET /wp-admin/admin-ajax.php
+        with action=get_judgements_judgement_date. Returns a dict with keys
+        {success, resultsHtml, message} or None on transport failure.
+        """
+        try:
+            result = self.page.evaluate(
+                """async () => {
+                    const $ = window.jQuery;
+                    const f = document.querySelector('#sciapi-services-judgements-judgement-date');
+                    if (!f || !$) return {ok:false, err:'form or jQuery missing'};
+                    const data = {};
+                    $(f).serializeArray().forEach(n => { data[n.name] = n.value; });
+                    data.action = 'get_judgements_judgement_date';
+                    data.es_ajax_request = 1;
+                    data.language = (window.ecourtServicesData && window.ecourtServicesData.currentLang) || 'en';
+                    try {
+                        const resp = await $.ajax({ method:'GET', dataType:'json', url:'/wp-admin/admin-ajax.php', data });
+                        let html = '', msg = '';
+                        if (resp && resp.success) {
+                            html = (resp.data && typeof resp.data.resultsHtml !== 'undefined') ? resp.data.resultsHtml : resp.data;
+                        } else {
+                            try { const d = JSON.parse(resp.data); msg = d.message || ''; }
+                            catch(e) { msg = String((resp && resp.data) || 'request failed'); }
+                        }
+                        return {ok:true, success: !!(resp && resp.success), resultsHtml: html || '', message: msg};
+                    } catch(e) {
+                        return {ok:false, err: 'ajax error ' + (e && e.status)};
+                    }
+                }"""
+            )
+            if not result or not result.get("ok"):
+                logger.warning(f"AJAX submit transport error: {result.get('err') if result else 'no result'}")
+                return None
+            return result
+        except Exception as e:
+            logger.error(f"_submit_search_ajax failed: {e}")
+            return None
+
     def solve_and_submit_captcha(self) -> bool:
+        """Solve the CAPTCHA and run the search via the site's AJAX endpoint.
+
+        Retries the whole solve+submit cycle (with a fresh CAPTCHA each time) because
+        a wrong CAPTCHA is only detectable from the server response.
+        """
+        max_attempts = max(1, self.config.captcha.max_captcha_attempts)
+
+        # Make sure the auto-refreshed CAPTCHA has settled before the first read.
+        try:
+            self.page.wait_for_selector("#siwp_captcha_image_0", state="visible", timeout=15000)
+        except Exception:
+            time.sleep(2)
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Solve the currently displayed CAPTCHA (single shot; we manage retries here)
+                captcha_text = self.captcha_solver.solve_captcha(self.page, 1)
+                if not captcha_text:
+                    logger.warning(f"[SEARCH] CAPTCHA unsolved (attempt {attempt}/{max_attempts})")
+                    self._refresh_captcha_and_wait()
+                    continue
+
+                if not self.captcha_solver.enter_captcha_text(self.page, captcha_text):
+                    logger.error("[SEARCH] Failed to enter CAPTCHA text")
+                    self._refresh_captcha_and_wait()
+                    continue
+
+                response = self._submit_search_ajax()
+                if response is None:
+                    self._refresh_captcha_and_wait()
+                    continue
+
+                if not response.get("success"):
+                    logger.warning(
+                        f"[SEARCH] Rejected (likely wrong CAPTCHA): "
+                        f"{response.get('message') or 'no message'} (attempt {attempt}/{max_attempts})"
+                    )
+                    self._refresh_captcha_and_wait()
+                    continue
+
+                results_html = response.get("resultsHtml") or ""
+                # Inject the results into the page exactly like the site does, so the
+                # existing DOM-based parser can read them.
+                self.page.evaluate(
+                    "html => { const el = document.querySelector('#cnrResults');"
+                    " if (el) { el.innerHTML = html; el.classList.remove('hide'); } }",
+                    results_html,
+                )
+                logger.info(f"[SEARCH] ✓ Results loaded via AJAX ({len(results_html)} bytes)")
+                return True
+
+            except Exception as e:
+                logger.error(f"[SEARCH] Attempt {attempt} failed: {e}")
+                self._refresh_captcha_and_wait()
+
+        logger.error("[SEARCH] Failed to submit search after all CAPTCHA attempts")
+        self.stats["captcha_failures"] += 1
+        return False
+
+    def _solve_and_submit_captcha_legacy(self) -> bool:
         """Solve CAPTCHA and submit the form"""
         try:
             # Solve CAPTCHA
             captcha_text = self.captcha_solver.solve_captcha(
-                self.page, 
+                self.page,
                 self.config.captcha.max_captcha_attempts
             )
-            
+
             if not captcha_text:
                 logger.error("Failed to solve CAPTCHA")
                 self.stats["captcha_failures"] += 1
@@ -424,28 +542,39 @@ class SupremeCourtScraper:
             # Debug: Log page content structure
             logger.debug(f"Page content length: {len(self.page.content())}")
             
-            # Look for the results table structure
-            table = soup.find('table')
+            # Look for the results table structure. IMPORTANT: the page also
+            # contains a datepicker calendar <table> (id="myDatepickerGrid") that
+            # appears *before* the results in the DOM, so a naive soup.find('table')
+            # grabs the calendar. Always look inside the AJAX results container first.
+            table = None
+            results_div = (soup.find('div', id='cnrResults') or
+                           soup.find('div', id='cnrresults'))
+            if results_div:
+                table = results_div.find('table')
+                if table:
+                    logger.info("Found table in cnrResults div")
+
+            # Next, try the distTableContent container.
             if not table:
-                logger.warning("No table found in search results")
-                # Try alternative selectors - first check cnrresults div
-                cnr_div = soup.find('div', id='cnrresults')
-                if cnr_div:
-                    table = cnr_div.find('table')
+                dist_div = soup.find('div', class_='distTableContent')
+                if dist_div:
+                    table = dist_div.find('table')
                     if table:
-                        logger.info("Found table in cnrresults div")
-                    else:
-                        logger.warning("cnrresults div found but no table inside")
-                
-                # If still no table, try distTableContent
-                if not table:
-                    table = soup.find('div', class_='distTableContent')
-                    if table:
-                        table = table.find('table')
                         logger.info("Found table in distTableContent div")
-                    else:
-                        logger.error("No table found in any expected location")
-                        return []
+
+            # Last resort: first <table> that is not the datepicker calendar.
+            if not table:
+                for candidate in soup.find_all('table'):
+                    tid = (candidate.get('id') or '').lower()
+                    tclass = ' '.join(candidate.get('class') or []).lower()
+                    if 'datepicker' in tid or 'mydatepicker' in tid or 'dates' in tclass:
+                        continue
+                    table = candidate
+                    break
+
+            if not table:
+                logger.error("No results table found in any expected location")
+                return []
             
             # Find all table rows with judgment data
             tbody = table.find('tbody')
@@ -1329,10 +1458,22 @@ class SupremeCourtScraper:
                 return str(file_path)
             else:
                 logger.error(f"Download failed or file is empty: {filename}")
+                # Remove the empty/orphaned file so it doesn't pile up in downloads/
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                except Exception:
+                    pass
                 return None
-                
+
         except Exception as e:
             logger.error(f"Failed to download {judgment_data.get('file_url', 'unknown')}: {e}")
+            # Clean up any partial file left behind by a failed download
+            try:
+                if 'file_path' in locals() and file_path.exists():
+                    file_path.unlink()
+            except Exception:
+                pass
             return None
     
     def process_judgment_with_multiple_files(self, judgment_data: Dict[str, str], date_range: DateRange) -> bool:
@@ -1549,7 +1690,12 @@ class SupremeCourtScraper:
         """Process all judgments for a specific date range"""
         try:
             logger.info(f"Processing date range: {date_range}")
-            
+
+            # Reset per-range network capture state so responses/endpoints from a
+            # previous range don't leak into this one (and don't grow unbounded).
+            self.captured_responses = []
+            self.api_endpoints = []
+
             # Navigate to search page
             if not self.navigate_to_search_page():
                 return False
