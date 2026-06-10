@@ -1,39 +1,44 @@
+# Versions are intentionally unpinned: the project runs on Python 3.12 (Ubuntu 24.04)
+# and 3.14, and old pins lack wheels for newer Pythons (lxml/numpy then try to build
+# from source and fail). pip will resolve compatible wheels for the running version.
+
 # Web scraping and automation
-playwright==1.48.0
-requests==2.32.3
-beautifulsoup4==4.12.3
-lxml==5.3.0
+playwright
+requests
+beautifulsoup4
+lxml
 
 # CAPTCHA solving
-pytesseract==0.3.13
-Pillow==10.4.0
-opencv-python==4.10.0.84
+pytesseract
+Pillow
+# headless build: no desktop GUI libraries required (servers have no libGL)
+opencv-python-headless
 
 # Database
-pymongo==4.10.1
+pymongo
 
 # Cloud storage
-boto3==1.35.0
+boto3
 
 # Data handling
-numpy==2.1.0
+numpy
 
 # Date/time utilities
-python-dateutil==2.8.2
+python-dateutil
 
 # Configuration and environment
-python-dotenv==1.0.1
-pyyaml==6.0.1
+python-dotenv
+pyyaml
 
 # Logging and monitoring
-loguru==0.7.2
-tqdm==4.66.1
+loguru
+tqdm
 
 # Retry and error handling
-tenacity==8.2.3
+tenacity
 
 # HTTP client with better session management
-httpx==0.25.2
+httpx
 
 # OpenAI API for CAPTCHA solving
-openai==1.54.3
+openai
